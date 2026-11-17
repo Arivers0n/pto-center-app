@@ -1,0 +1,48 @@
+# Родное приложение ПТО-центр для iPhone и iPad (SwiftUI). Результат — неподписанный .ipa:
+# подписывается вашим сертификатом (.p12 + .mobileprovision) в Esign, Feather или Sideloadly.
+# Адрес сервера берётся из секрета PTO_SERVER. Файл .ipa хранится у GitHub 1 день и не публикуется в Releases.
+name: Сборка .ipa
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Проект Xcode из project.yml
+        run: |
+          brew install xcodegen
+          sed -i '' "s/CURRENT_PROJECT_VERSION: \"1\"/CURRENT_PROJECT_VERSION: \"${{ github.run_number }}\"/" project.yml
+          xcodegen generate
+
+      - name: Сборка без подписи
+        env:
+          PTO_SERVER: ${{ secrets.PTO_SERVER }}
+        run: |
+          test -n "$PTO_SERVER" || { echo "Нет секрета PTO_SERVER"; exit 1; }
+          set -o pipefail
+          xcodebuild -project PTO.xcodeproj -scheme PTO -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/PTO.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" PTO_SERVER="$PTO_SERVER" \
+            archive > "$RUNNER_TEMP/build.log" 2>&1 || { grep -E "error:" "$RUNNER_TEMP/build.log" | head -n 60; exit 1; }
+          grep -E "warning:" "$RUNNER_TEMP/build.log" | grep -v "deprecated" | head -n 20 || true
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/PTO.xcarchive/Products/Applications/PTO.app" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/PTO-center.ipa" Payload
+          ls -la "$GITHUB_WORKSPACE/PTO-center.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PTO-center-ipa
+          path: PTO-center.ipa
+          retention-days: 1
