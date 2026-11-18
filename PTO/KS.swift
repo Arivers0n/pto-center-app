@@ -309,7 +309,7 @@ struct KSView: View {
     private var totalsSection: some View {
         let tot = doc.total
         let vat = tot * doc.vatPercent / 100
-        let prev = closing.map { ksPreviousTotals(store.list("closings"), for: $0) } ?? (0, 0)
+        let prev = closing.map { ksPreviousTotals(store.list("closings"), for: $0) } ?? (all: 0, year: 0)
         return Section {
             totalRow("Итого по КС-2", tot, strong: true)
             if doc.lines.allSatisfy({ $0.priceValue == 0 }) {

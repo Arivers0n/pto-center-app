@@ -144,7 +144,7 @@ private struct SyncReply: Decodable { let rev: Int; let changes: [Change] }
 private struct Cache: Codable { var rev: Int; var cols: [String: [String: JSON]]; var pending: [Op] }
 private struct PushBody: Encodable { let ops: [Op] }
 
-@MainActor
+// Не @MainActor: данными пользуются и обычные функции-помощники. Методы, которые ждут сеть, помечены отдельно.
 final class Store: ObservableObject {
     @Published private(set) var token: String? = Keychain.get("token")
     @Published private(set) var cols: [String: [String: JSON]] = [:]
@@ -188,6 +188,7 @@ final class Store: ObservableObject {
     func setKV(_ key: String, _ v: JSON) { put("kv", Rec(id: key, v: v)) }
 
     // вход и выход
+    @MainActor
     func login(_ user: String, _ password: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["login": user, "password": password])
         let data = try await API.request("api/login", method: "POST", token: nil, body: body)
@@ -197,6 +198,7 @@ final class Store: ObservableObject {
         Keychain.set("token", t); token = t
         rev = 0; await sync()
     }
+    @MainActor
     func logout() {
         if let t = token { Task { _ = try? await API.request("api/logout", method: "POST", token: t) } }
         Keychain.set("token", nil); token = nil; cols = [:]; pending = []; rev = 0; save()
@@ -204,6 +206,7 @@ final class Store: ObservableObject {
     }
 
     // синхронизация
+    @MainActor
     func start() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -211,9 +214,11 @@ final class Store: ObservableObject {
         }
         Task { await sync() }
     }
+    @MainActor
     func stop() { timer?.invalidate(); timer = nil }
-    private func kick() { Task { await sync() } }
+    private func kick() { Task { @MainActor in await self.sync() } }
 
+    @MainActor
     func sync() async {
         guard let token, !busy else { return }
         busy = true; state = .syncing
