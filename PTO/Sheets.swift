@@ -210,8 +210,8 @@ private func clCellString(_ c: ClCol, _ x: Double) -> String {
     switch c.fmt {
     case .pct: return clNum(x * 100, 1) + " %"
     case .status: return x < 0 ? "перерасход" : (x == 0 ? "выбрано" : "в остатке")
-    case .int: return clNum(x, 0)
-    case .dec: return clNum(x, 2)
+    case .int: return clNum(x == 0 ? 0 : x, 0)
+    case .dec: return clNum(x == 0 ? 0 : x, 2)
     }
 }
 
@@ -374,14 +374,17 @@ struct SheetsView: View {
                 Divider()
                 ScrollView(.horizontal, showsIndicators: true) { scrollingColumns(sh, p, totals) }
             }
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shPanel(10)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             if rows.isEmpty {
                 EmptyNote(title: "Таблица пуста", text: "Нажмите «Добавить строку» или подтяните данные кнопкой ниже")
             }
+            Text("Проведите по таблице влево, чтобы увидеть остальные столбцы.")
+                .font(.caption).foregroundStyle(.secondary)
             actions
         }
         .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shPanel(16)
     }
 
     private func paramField(_ label: String) -> some View {

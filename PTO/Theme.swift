@@ -85,7 +85,7 @@ enum ShSkin: String, CaseIterable, Identifiable {
                                 ShSpot(hex: 0x78afff, alpha: 0.40, x: -0.05, y: 0.30, radius: 640)], grid: false))
         case .gBlue:
             return ShSkinSpec(title: "Синька под стеклом", detail: "Сетка чертежа сквозь панели", scheme: .dark,
-                              bg: 0x0b2446, panel: 0x123058, text: 0xeef5ff, accent: 0x7fe0ff,
+                              bg: 0x0b2446, panel: 0x1b385b, text: 0xeef5ff, accent: 0x7fe0ff,
                               glass: ShGlassSpec(tint: 0x123058, tintAlpha: 0.5, border: 0xa0cdff, borderAlpha: 0.2, spots: [
                                 ShSpot(hex: 0x174a86, alpha: 1, x: 0.8, y: 0, radius: 700)], grid: true))
         case .gConcrete:
@@ -209,6 +209,10 @@ final class ThemeStore: ObservableObject {
         skin == .standard ? Color(.secondarySystemGroupedBackground) : Color(shHex: skin.spec.panel)
     }
 
+    func control() -> Color {
+        skin == .standard ? Color(.tertiarySystemGroupedBackground) : Color(shHex: skin.spec.bg).opacity(0.55)
+    }
+
     /// Пункт меню виден, если не скрыт в настройках (главная и настройки скрыть нельзя)
     func isVisible(_ s: ShSection, keep: ShSection? = nil) -> Bool {
         s == .home || s == .settings || s == keep || !hidden.contains(s.rawValue)
@@ -281,7 +285,7 @@ struct ShBackdrop: View {
             base
             if let g = skin.spec.glass {
                 ShSpots(spots: g.spots)
-                if g.grid { ShGridLines(hex: 0x96c8ff, minorAlpha: 0.09, majorAlpha: 0.16) }
+                if g.grid { ShGridLines(hex: 0x96c8ff, minorAlpha: 0.045, majorAlpha: 0.085) }
             } else if skin.spec.grid {
                 ShGridLines(hex: 0xffffff, minorAlpha: 0.035, majorAlpha: 0.05)
             }

@@ -48,6 +48,7 @@ private enum KsSchemesSheet: Identifiable {
 // MARK: - Закрытия по проектам
 
 struct SchemesView: View {
+    @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject var store: Store
     @State private var shop = "Все"
     @State private var query = ""
@@ -97,6 +98,7 @@ struct SchemesView: View {
         .safeAreaInset(edge: .top, spacing: 0) { projectBar }
         .searchable(text: $query, prompt: "Система, оси, помещение, замечание")
         .navigationTitle("Исполнительные схемы")
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: String.self) { id in ClosingView(closingID: id) }
         .navigationDestination(for: SchemeRoute.self) { r in SchemeViewer(schemeID: r.id) }
         .toolbar {
@@ -152,7 +154,7 @@ struct SchemesView: View {
             }
             .padding(.horizontal).padding(.vertical, 8)
         }
-        .background(.bar)
+        .background(theme.panel())
     }
 
     @ViewBuilder private var closingRows: some View {
@@ -160,6 +162,7 @@ struct SchemesView: View {
         Section {
             ForEach(closings) { c in
                 NavigationLink(value: c.id) { ClosingRow(c: c) }
+                    .listRowBackground(theme.panel())
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) { deleteClosing = c } label: { Label("Удалить", systemImage: "trash") }
                         Button { sheet = .edit(c.id) } label: { Label("Изменить", systemImage: "pencil") }.tint(.blue)
@@ -171,6 +174,7 @@ struct SchemesView: View {
             }
             if !none.isEmpty {
                 NavigationLink(value: "none") { Label("Не распределены · \(none.count)", systemImage: "tray") }
+                    .listRowBackground(theme.panel())
             }
         }
         if closings.isEmpty && none.isEmpty {
@@ -191,6 +195,7 @@ struct SchemesView: View {
         Section("Найдено: \(found.count)") {
             ForEach(found) { s in
                 NavigationLink(value: SchemeRoute(id: s.id)) { SchemeRow(s: s, showClosing: true) { deleteScheme = $0 } }
+                    .listRowBackground(theme.panel())
             }
         }
         if found.isEmpty { EmptyNote(title: "Ничего не найдено", text: "Ищите по системе, осям, помещению или тексту замечания.") }
@@ -355,6 +360,7 @@ struct KsClosingEditor: View {
 private enum KsClosingTab { case schemes, ks }
 
 struct ClosingView: View {
+    @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) private var dismiss
     let closingID: String
@@ -418,8 +424,9 @@ struct ClosingView: View {
                         ForEach(["work", "closed", "rest"], id: \.self) { k in Text(clStatus[k]?.0 ?? k).tag(k) }
                     }
                     .pickerStyle(.segmented)
-                    if !c["note"].str.isEmpty { Text(c["note"].str).font(.subheadline).foregroundStyle(.secondary) }
-                    downloadRow
+                    .listRowBackground(theme.panel())
+                    if !c["note"].str.isEmpty { Text(c["note"].str).font(.subheadline).foregroundStyle(.secondary).listRowBackground(theme.panel()) }
+                    downloadRow.listRowBackground(theme.panel())
                 } footer: { Text("Скачанные чертежи открываются сразу и без интернета.") }
             }
             if !allSys.isEmpty {
@@ -434,6 +441,7 @@ struct ClosingView: View {
             Section("Схемы · \(schemes.count)") {
                 ForEach(schemes) { s in
                     NavigationLink(value: SchemeRoute(id: s.id)) { SchemeRow(s: s, showClosing: false) { deleteScheme = $0 } }
+                    .listRowBackground(theme.panel())
                 }
                 if schemes.isEmpty { EmptyNote(title: "Схем нет", text: "Перенесите схему сюда из другого закрытия (долгое нажатие на строку) или заберите схемы из Google Диска.") }
             }

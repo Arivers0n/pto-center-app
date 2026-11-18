@@ -108,6 +108,8 @@ private struct LsStats {
 }
 
 struct TabelView: View {
+    @EnvironmentObject private var theme: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var store: Store
     @State private var ym = String(Fmt.today.prefix(7))
     @State private var dayRef: LsDayRef?
@@ -145,10 +147,10 @@ struct TabelView: View {
     var body: some View {
         List {
             Section {
-                monthBar
-                actions
+                monthBar.listRowBackground(theme.panel())
+                actions.listRowBackground(theme.panel())
             }
-            Section { summary }
+            Section { summary.listRowBackground(theme.panel()) }
             Section {
                 ForEach(days, id: \.self) { k in row(k) }
             } footer: {
@@ -156,6 +158,7 @@ struct TabelView: View {
             }
         }
         .navigationTitle("Табель")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack {
@@ -201,7 +204,7 @@ struct TabelView: View {
     }
 
     @ViewBuilder private var actionButtons: some View {
-        Button { clockIn() } label: { Text("Пришёл").frame(maxWidth: .infinity, minHeight: 36) }
+        Button { clockIn() } label: { Text("Пришёл").foregroundStyle(theme.onTint(colorScheme)).frame(maxWidth: .infinity, minHeight: 36) }
             .buttonStyle(.borderedProminent).disabled(!isCurrent)
         Button { clockOut() } label: { Text("Ушёл").frame(maxWidth: .infinity, minHeight: 36) }
             .buttonStyle(.bordered).disabled(!isCurrent)
@@ -263,7 +266,7 @@ struct TabelView: View {
 
     private func rowBackground(today: Bool, weekend: Bool) -> Color {
         if today { return Color.pto.opacity(0.14) }
-        return weekend ? Color(.tertiarySystemFill) : Color(.secondarySystemGroupedBackground)
+        return weekend ? theme.control() : theme.panel()
     }
 
     private func typeColor(_ t: String) -> Color {

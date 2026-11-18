@@ -39,6 +39,8 @@ private struct RqSecStat: Identifiable {
 
 /// Сводка заявок: что заказано, по каким разделам и что ещё не пришло (PAGES.reqdash)
 struct RequestsDashView: View {
+    @EnvironmentObject private var theme: ThemeStore
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var store: Store
 
     private var reqs: [Rec] { store.list("requests") }
@@ -80,7 +82,7 @@ struct RequestsDashView: View {
         let late = wait.filter { Rq.isLate($0.v) }.count
         let percent = positions.isEmpty ? 0 : Int((Double(got) / Double(positions.count) * 100).rounded())
         let waitLabel = late > 0 ? "ждём поставку, просрочено \(late)" : "ждём поставку"
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 168), spacing: 12)], spacing: 12) {
             Tile(value: Fmt.num(Double(list.count), 0), label: "заявок", icon: "shippingbox", tap: {})
             Tile(value: Fmt.num(Double(positions.count), 0), label: "позиций в заявках", icon: "list.bullet", tap: {})
             Tile(value: "\(percent)%", label: "позиций отмечено полученными", icon: "checkmark.circle", tint: .green, tap: {})
@@ -114,7 +116,7 @@ struct RequestsDashView: View {
                 Chart(data) { m in
                     BarMark(x: .value("Месяц", m.label), y: .value("Заявок", m.n))
                         .cornerRadius(4)
-                        .foregroundStyle(Color.pto)
+                        .foregroundStyle(theme.tint(colorScheme))
                         .annotation(position: .top) { Text("\(m.n)").font(.caption2).monospacedDigit().foregroundStyle(.secondary) }
                         .accessibilityLabel(m.full)
                         .accessibilityValue("\(m.n) заявок, \(m.positions) позиций")
@@ -143,9 +145,9 @@ struct RequestsDashView: View {
             ForEach(stats) { x in
                 NavigationLink { RequestsView(initialSec: x.id) } label: {
                     HStack(spacing: 10) {
-                        Text(x.name).font(.subheadline).frame(width: 120, alignment: .leading).lineLimit(1)
+                        Text(x.name).font(.subheadline).frame(width: 136, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                         GeometryReader { geo in
-                            Capsule().fill(Color.pto.opacity(0.85))
+                            Capsule().fill(theme.tint(colorScheme).opacity(0.85))
                                 .frame(width: max(x.n > 0 ? 4 : 0, geo.size.width * CGFloat(x.n) / CGFloat(top)))
                         }
                         .frame(height: 8)

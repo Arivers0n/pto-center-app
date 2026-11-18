@@ -245,6 +245,7 @@ struct RqCSVFile: Transferable {
 // MARK: - Список заявок
 
 struct RequestsView: View {
+    @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject var store: Store
     @Environment(\.horizontalSizeClass) private var hSize
     @State private var sec: String
@@ -287,18 +288,19 @@ struct RequestsView: View {
                         Button { cycle(r) } label: { Label("Статус", systemImage: "arrow.triangle.2.circlepath") }.tint(.orange)
                     }
                     .contextMenu { rowMenu(r) }
+                    .listRowBackground(theme.panel())
             }
             if rows.isEmpty {
                 EmptyNote(title: query.isEmpty ? "Заявок нет" : "Ничего не найдено",
                           text: query.isEmpty ? "Нажмите «+», чтобы создать заявку." : "Попробуйте другое слово: номер, материал или цех.")
             }
         }
-        .listStyle(.plain)
-        .animation(.default, value: rows.map(\.id))
+        .listStyle(.insetGrouped)
         .ptoScreen()
         .safeAreaInset(edge: .top, spacing: 0) { sectionBar }
         .searchable(text: $query, prompt: "Заявки и материалы")
         .navigationTitle("Заявки на ТМЦ")
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: RqRoute.self) { route in
             if let r = store.get("requests", route.id) { RequestEditView(rec: r, isNew: false) } else { Text("Заявка удалена") }
         }
@@ -391,7 +393,12 @@ struct RqRow: View {
     var wide: Bool = false
 
     var body: some View {
-        if wide { wideRow } else { compactRow }
+        if wide {
+            ViewThatFits(in: .horizontal) {
+                wideRow.frame(minWidth: 660)
+                compactRow
+            }
+        } else { compactRow }
     }
 
     @ViewBuilder private var sectionTag: some View {

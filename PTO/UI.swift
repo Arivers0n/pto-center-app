@@ -60,7 +60,7 @@ private struct ShPressBody: View {
         configuration.label
             .scaleEffect(shrink ? 0.97 : 1)
             .opacity(configuration.isPressed && reduceMotion ? 0.7 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -74,7 +74,7 @@ struct Chip: View {
 
     var body: some View {
         let ink = theme.onTint(scheme)
-        Button(action: { withAnimation(.easeOut(duration: 0.2)) { tap() } }) {
+        Button(action: tap) {
             HStack(spacing: 5) {
                 Text(title)
                 if let count {
@@ -83,7 +83,7 @@ struct Chip: View {
             }
             .font(.subheadline.weight(on ? .semibold : .regular))
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .frame(minHeight: 36)
+            .frame(minHeight: 44)
             .background(chipFill)
             .foregroundStyle(on ? ink : Color.primary)
         }

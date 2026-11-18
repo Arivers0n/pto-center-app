@@ -183,6 +183,7 @@ enum AppTab: String, CaseIterable, Identifiable, Hashable {
 struct RootTabs: View {
     @EnvironmentObject var theme: ThemeStore
     @Environment(\.horizontalSizeClass) private var size
+    @Environment(\.colorScheme) private var colorScheme
     @State private var current: ShSection = .home
     @State private var tab: AppTab = .home
     @State private var morePath: [ShSection] = []
@@ -202,23 +203,68 @@ struct RootTabs: View {
     // iPad
     private var sidebarLayout: some View {
         NavigationSplitView {
-            List(selection: Binding<ShSection?>(get: { current }, set: { if let v = $0 { current = v } })) {
-                BrandHeader()
-                ForEach(ShGroup.allCases) { g in
-                    let items = ShSection.allCases.filter { $0.group == g && theme.isVisible($0, keep: current) }
-                    if !items.isEmpty {
-                        Section(g.rawValue) {
-                            ForEach(items) { s in Label(s.title, systemImage: s.icon).tag(s) }
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        BrandHeader()
+                        ForEach(ShGroup.allCases) { group in
+                            let items = ShSection.allCases.filter { $0.group == group && theme.isVisible($0, keep: current) }
+                            if !items.isEmpty { sidebarGroup(group, items: items) }
                         }
                     }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
                 }
+                Divider()
+                ProfileCard { current = .settings }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(theme.panel())
             }
             .navigationTitle("ПТО-центр")
+            .navigationBarTitleDisplayMode(.inline)
             .ptoScreen()
-            .safeAreaInset(edge: .bottom) { ProfileCard { current = .settings }.padding(12) }
         } detail: {
             NavigationStack { ShScreenFactory(section: current, open: open) }
                 .id(current)
+        }
+    }
+
+    private func sidebarGroup(_ group: ShGroup, items: [ShSection]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(group.rawValue).font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary).accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, 10)
+            VStack(spacing: 2) {
+                ForEach(items) { section in
+                    let selected = section == current
+                    Button { current = section } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: section.icon).frame(width: 22)
+                                .foregroundStyle(selected ? theme.tint(colorScheme) : Color.secondary)
+                                .accessibilityHidden(true)
+                            Text(section.title).font(.subheadline.weight(selected ? .semibold : .regular))
+                            Spacer(minLength: 4)
+                            if selected {
+                                Image(systemName: "checkmark").font(.caption.weight(.semibold))
+                                    .foregroundStyle(theme.tint(colorScheme)).accessibilityHidden(true)
+                            }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .frame(minHeight: 44)
+                        .foregroundStyle(.primary)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 8).fill(theme.tint(colorScheme).opacity(0.17))
+                                RoundedRectangle(cornerRadius: 8).strokeBorder(theme.tint(colorScheme).opacity(0.55))
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .padding(4)
+            .shPanel(12)
         }
     }
 
@@ -247,7 +293,7 @@ private struct BrandHeader: View {
         let sub = store.cfg["brandSub"].str
         if !sub.isEmpty {
             Text(sub).font(.footnote).foregroundStyle(.secondary)
-                .listRowBackground(Color.clear)
+                .padding(.horizontal, 10)
         }
     }
 }

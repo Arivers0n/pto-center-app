@@ -4,6 +4,7 @@ import UIKit
 // MARK: - Контакты
 
 struct ContactsView: View {
+    @EnvironmentObject private var theme: ThemeStore
     @EnvironmentObject var store: Store
     @Environment(\.openURL) private var openURL
     @State private var query = ""
@@ -54,11 +55,12 @@ struct ContactsView: View {
             }
             ForEach(groups, id: \.org) { g in
                 Section(g.org) {
-                    ForEach(g.items) { c in row(c) }
+                    ForEach(g.items) { c in row(c).listRowBackground(theme.panel()) }
                 }
             }
         }
         .navigationTitle("Контакты")
+        .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: "Имя, должность, организация, телефон, почта")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -90,7 +92,7 @@ struct ContactsView: View {
                     Text(c["name"].str).font(.headline).foregroundStyle(.primary)
                     if !c["role"].str.isEmpty { Text(c["role"].str).font(.footnote).foregroundStyle(.secondary) }
                     if c["phone"].str.isEmpty && c["email"].str.isEmpty {
-                        Text("телефон и почта не указаны").font(.footnote).foregroundStyle(.tertiary)
+                        Text("Телефон и почта не указаны").font(.footnote).foregroundStyle(.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
