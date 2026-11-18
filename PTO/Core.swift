@@ -227,15 +227,10 @@ final class Store: ObservableObject {
             if !pending.isEmpty {
                 let ops = pending
                 let body = try JSONEncoder().encode(PushBody(ops: ops))
-                do {
-                    _ = try await API.request("api/center/push", method: "POST", token: token, body: body)
-                } catch let e as API.Failure where [400, 403, 413, 422].contains(e.status) {
-                    // сервер не примет эти правки никогда (только просмотр, неверный запрос) — не держим очередь вечно
-                    for op in ops { if let i = pending.firstIndex(of: op) { pending.remove(at: i) } }
-                    throw e
-                }
+                _ = try await API.request("api/center/push", method: "POST", token: token, body: body)
                 // во время отправки могли появиться новые правки — убираем только то, что ушло
                 for op in ops { if let i = pending.firstIndex(of: op) { pending.remove(at: i) } }
+                save()
             }
             let data = try await API.request("api/center/sync?since=\(rev)", token: token)
             let reply = try JSONDecoder().decode(SyncReply.self, from: data)
@@ -251,7 +246,7 @@ final class Store: ObservableObject {
         } catch let e as API.Failure where e.status == 401 {
             Keychain.set("token", nil); self.token = nil; state = .error("Вход устарел — войдите заново")
         } catch let e as API.Failure {
-            state = .error(e.message)
+            state = .error(pending.isEmpty ? e.message : "На сервер не сохранено: \(e.message). Изменения остались на устройстве.")
         } catch {
             state = .offline
         }

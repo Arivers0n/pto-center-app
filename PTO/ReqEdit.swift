@@ -15,6 +15,7 @@ struct RequestEditView: View {
     @State private var v: JSON = .o([:])
     @State private var items: [JSON] = []
     @State private var loaded = false
+    @State private var lastCommit: JSON?
     @State private var showPrint = false
 
     var body: some View {
@@ -27,6 +28,7 @@ struct RequestEditView: View {
                 Button { addItem() } label: { Label("Добавить позицию", systemImage: "plus.circle.fill") }
                 Button { showPrint = true } label: { Label("Печать / PDF", systemImage: "printer") }.disabled(!hasContent)
             } footer: {
+                if let validationError { Text(validationError).foregroundStyle(.red) }
                 Text("«Получено» — сколько уже пришло на объект. Форму заявки можно распечатать или сохранить в PDF.")
             }
         }
@@ -38,7 +40,7 @@ struct RequestEditView: View {
         .navigationBarTitleDisplayMode(.inline)
         .scrollDismissesKeyboard(.interactively)
         .toolbar { toolbarContent }
-        .onAppear { if !loaded { v = rec.v; items = rec["items"].arr; loaded = true } }
+        .onAppear { if !loaded { v = rec.v; items = rec["items"].arr; lastCommit = rec.v; loaded = true } }
         .onDisappear { if !isNew { commit() } }
         .onChange(of: phase) { p in if p != .active && !isNew { commit() } }
         .interactiveDismissDisabled(isNew && hasContent)
@@ -173,7 +175,7 @@ struct RequestEditView: View {
         if isNew {
             ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Сохранить") { commit(); dismiss() }.disabled(!hasContent)
+                Button("Сохранить") { commit(); dismiss() }.disabled(!hasContent || validationError != nil)
             }
         } else {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -203,6 +205,24 @@ struct RequestEditView: View {
 
     private var hasContent: Bool { items.contains { !$0["name"].str.trimmingCharacters(in: .whitespaces).isEmpty } }
 
+    private var validationError: String? {
+        if isNew {
+            guard let number = v["no"].num, number.isFinite, number > 0,
+                  number == number.rounded() else { return "Укажите целый положительный номер заявки." }
+            if v["sec"].str.isEmpty { return "Выберите раздел." }
+        }
+        for item in items {
+            for key in ["qty", "got"] {
+                let raw = item[key].str.trimmingCharacters(in: .whitespaces)
+                if raw.isEmpty { continue }
+                guard let number = item[key].num, number.isFinite, number >= 0 else {
+                    return "Укажите корректное количество в каждой позиции."
+                }
+            }
+        }
+        return nil
+    }
+
     private func addItem() {
         let unit = items.last?["unit"].str ?? "шт"
         withAnimation { items.append(Rq.newItem(store.cfg, unit: unit.isEmpty ? "шт" : unit)) }
@@ -213,20 +233,29 @@ struct RequestEditView: View {
     }
 
     private func commit() {
-        guard loaded else { return }
+        guard loaded, validationError == nil, let previous = lastCommit else { return }
         if isNew && !hasContent { return }
         var out = v
         out["items"] = .a(items.map(normalizeItem))
-        let no = out["no"].num ?? 0
-        out["no"] = .n(no)
-        if out != rec.v { store.put("requests", Rec(id: rec.id, v: out)) }
+        if let number = out["no"].num, number.isFinite { out["no"] = .n(number) }
+
+        if isNew {
+            store.put("requests", Rec(id: rec.id, v: out))
+        } else if var latest = store.get("requests", rec.id) {
+            let keys = Set(out.obj.keys).union(previous.obj.keys)
+            let changed = keys.filter { out[$0] != previous[$0] }
+            guard !changed.isEmpty else { return }
+            for key in changed { latest.v[key] = out[key] }
+            store.put("requests", latest)
+        }
+        lastCommit = out
     }
 
     private func normalizeItem(_ i: JSON) -> JSON {
         var x = i
         for k in ["qty", "got"] {
             let s = x[k].str.trimmingCharacters(in: .whitespaces)
-            if let d = Double(s.replacingOccurrences(of: ",", with: ".")) {
+            if let d = Double(s.replacingOccurrences(of: ",", with: ".")), d.isFinite {
                 x[k] = .n(d)
             } else if s.isEmpty && k == "got" {
                 x[k] = nil

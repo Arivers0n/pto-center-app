@@ -19,6 +19,7 @@ struct SchemeViewer: View {
     @State private var showPins = false
     @State private var showSide = true
     @State private var focusPin: String?
+    @State private var rotationCommand = 0
 
     private var s: Rec? { store.get("schemes", schemeID) }
     private var openCount: Int { s?["pins"].arr.filter { !ksPinDone($0) }.count ?? 0 }
@@ -62,7 +63,7 @@ struct SchemeViewer: View {
         ZStack {
             Color(.secondarySystemBackground).ignoresSafeArea()
             if let url {
-                PDFCanvas(url: url, pins: (s?["pins"].arr ?? []).filter { $0["on"].str.isEmpty || $0["on"].str == which }, pinMode: pinMode, focus: focusPin) { page, x, y in
+                PDFCanvas(url: url, pins: (s?["pins"].arr ?? []).filter { $0["on"].str.isEmpty || $0["on"].str == which }, pinMode: pinMode, focus: focusPin, rotationCommand: rotationCommand) { page, x, y in
                     newPin = NewPin(page: page, x: x, y: y); pinText = ""
                 }
                 .ignoresSafeArea(edges: .bottom)
@@ -99,6 +100,8 @@ struct SchemeViewer: View {
             }
         } label: { Label(isStatus[s?["status"].str ?? "draft"]?.0 ?? "Статус", systemImage: "checkmark.seal") }
         Spacer()
+        Button { rotationCommand += 1 } label: { Label("Повернуть лист", systemImage: "rotate.right") }
+            .disabled(url == nil)
         Button {
             if regular { showSide.toggle() } else { showPins = true }
         } label: { Label(openCount > 0 ? "Замечания · \(openCount)" : "Замечания", systemImage: regular ? "sidebar.right" : "list.bullet") }
@@ -116,7 +119,12 @@ struct SchemeViewer: View {
         let id = which == "signed" ? s["signed"].str : s["pdf"].str
         url = nil; err = nil
         guard !id.isEmpty else { err = "Файла нет"; return }
-        do { url = try await FileCache.get(id, token: store.token) } catch { err = error.localizedDescription }
+        do {
+            let file = try await FileCache.get(id, token: store.token)
+            if !Task.isCancelled { url = file }
+        } catch {
+            if !Task.isCancelled { err = error.localizedDescription }
+        }
     }
     private func setStatus(_ k: String) {
         guard var x = s else { return }
@@ -334,6 +342,7 @@ struct PDFCanvas: UIViewRepresentable {
     let pins: [JSON]
     let pinMode: Bool
     let focus: String?
+    let rotationCommand: Int
     let onPin: (Int, Double, Double) -> Void
 
     func makeCoordinator() -> Coord { Coord(onPin: onPin) }
@@ -350,6 +359,7 @@ struct PDFCanvas: UIViewRepresentable {
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coord.tap(_:)))
         tap.delegate = context.coordinator
         v.addGestureRecognizer(tap)
+        context.coordinator.rotationCommand = rotationCommand
         context.coordinator.view = v
         return v
     }
@@ -360,6 +370,14 @@ struct PDFCanvas: UIViewRepresentable {
         context.coordinator.onPin = onPin
         context.coordinator.pinMode = pinMode
         guard let doc = v.document else { return }
+        if context.coordinator.rotationCommand != rotationCommand {
+            context.coordinator.rotationCommand = rotationCommand
+            if let page = v.currentPage {
+                page.rotation = (page.rotation + 90) % 360
+                v.layoutDocumentView()
+                v.go(to: page)
+            }
+        }
         // метки перерисовываются только когда замечания изменились
         let sig = pins.map { $0["id"].str + ($0["done"]?.bool == true ? "1" : "0") + $0["text"].str }.joined(separator: ",")
         if sig != context.coordinator.drawn {
@@ -399,6 +417,7 @@ struct PDFCanvas: UIViewRepresentable {
         var pinMode = false
         var lastFocus: String?
         var drawn = ""
+        var rotationCommand = 0
         weak var view: PDFView?
         init(onPin: @escaping (Int, Double, Double) -> Void) { self.onPin = onPin }
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }

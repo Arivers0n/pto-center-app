@@ -81,17 +81,16 @@ enum RqAct {
         for r in all where r["sec"].str.isEmpty && !sig(r).isEmpty {
             guard let tw = bySig[r["no"].str + "#" + sig(r)] else { continue }
             let id = r.id
-            out.append(RqFinding(id: "c" + id, group: "Старые копии",
-                                 text: "№\(r["no"].str) от \(Fmt.show(r["date"].str)) без раздела: такая же есть в «\(store.secName(tw["sec"].str))» (\(reqName(tw)))", on: true,
-                                 fix: { $0.delete("requests", id) }))
+            out.append(RqFinding(id: "c" + id, group: "Возможные старые копии",
+                                 text: "\(reqName(r)): похожая заявка есть в разделе «\(store.secName(tw["sec"].str))». Сравните реквизиты."))
         }
         var seen = Set<String>()
         for r in all where !r["sec"].str.isEmpty && !sig(r).isEmpty {
             let k = r["sec"].str + "#" + r["no"].str + "#" + sig(r)
             if seen.contains(k) {
                 let id = r.id
-                out.append(RqFinding(id: "d" + id, group: "Двойные заявки", text: "\(reqName(r)) в «\(store.secName(r["sec"].str))» записана дважды", on: true,
-                                     fix: { $0.delete("requests", id) }))
+                out.append(RqFinding(id: "d" + id, group: "Возможные дубли заявок",
+                                     text: "\(reqName(r)): найдена похожая заявка. Сравните позиции и реквизиты."))
             } else { seen.insert(k) }
         }
         out += findLost(store, all, secs, secIds)
@@ -193,6 +192,7 @@ enum RqAct {
         out += doubles(schemes, closings)
         out += await packages(store, closings, schemes, deep: deep, step: step)
         out += statuses(schemes)
+        out += missingLocalFiles(schemes)
         if deep { out += await differences(store, closings, schemes, step: step) }
         return out
     }
@@ -219,19 +219,10 @@ enum RqAct {
         var out: [RqFinding] = []
         for s in schemes {
             let key = s["closing"].str + "#" + Rq.nm(s["title"].str)
-            guard let a = first[key] else { first[key] = s; continue }
-            let sid = s.id, aid = a.id
+            guard first[key] != nil else { first[key] = s; continue }
             let c = closings.first { $0.id == s["closing"].str }
-            out.append(RqFinding(id: "ds" + sid, group: "Двойные схемы",
-                                 text: "«\(s["title"].str)» дважды в \(closingName(c)): оставить одну, файлы и замечания объединить", on: true,
-                                 fix: { st in
-                                     guard let dup = st.get("schemes", sid), var keep = st.get("schemes", aid) else { return }
-                                     if !dup["signed"].str.isEmpty && keep["signed"].str.isEmpty { keep.v["signed"] = dup["signed"] }
-                                     if !dup["pdf"].str.isEmpty && keep["pdf"].str.isEmpty { keep.v["pdf"] = dup["pdf"] }
-                                     keep.v["pins"] = .a(keep["pins"].arr + dup["pins"].arr)
-                                     st.put("schemes", keep)
-                                     st.delete("schemes", sid)
-                                 }))
+            out.append(RqFinding(id: "ds" + s.id, group: "Возможные дубли схем",
+                                 text: "«\(s["title"].str)» в \(closingName(c)): проверьте редакции и вложения."))
         }
         return out
     }
@@ -257,20 +248,21 @@ enum RqAct {
                 step("Листаю подписанный пакет: " + name)
                 for p in pk { pages += await pdfPages(store, p["signed"].str) }
             }
-            let covers = deep && pages >= noSig.count
             let titles = pk.map { "«\($0["title"].str)»" }.joined(separator: ", ")
-            let tail = covers ? "Отметить чистовики подписанными в пакете." : (deep ? "Листов в пакете меньше, чем схем: проверьте пакет." : "Нажмите «Сверить файлы схем», чтобы посчитать листы.")
-            let text = "\(name): у \(noSig.count) чистовиков нет отдельной подписанной копии, есть подписанный пакет \(titles)" + (deep ? " (\(pages) лист.)" : "") + ". " + tail
-            let ids = noSig.map(\.id), file = pk[0]["signed"].str
-            var fixer: (@MainActor (Store) -> Void)?
-            if covers {
-                fixer = { st in
-                    for id in ids { patch(st, "schemes", id) { $0["signed"] = .s(file); $0["sigPkg"] = .b(true); $0["status"] = .s("signed") } }
-                }
-            }
-            out.append(RqFinding(id: "pk" + c.id, group: "Подписаны пакетом", text: text, on: covers, fix: fixer))
+            let detail = deep ? " (доступно страниц: \(pages))" : ""
+            let text = "\(name): у \(noSig.count) схем нет отдельной подписанной копии. Пакеты: \(titles)\(detail). Сверьте конкретные листы."
+            out.append(RqFinding(id: "pk" + c.id, group: "Проверить подписанный пакет", text: text))
         }
         return out
+    }
+
+    private static func missingLocalFiles(_ schemes: [Rec]) -> [RqFinding] {
+        schemes.compactMap { scheme in
+            let file = scheme["pdf"].str
+            guard !file.isEmpty, !file.hasPrefix("gd:"), !FileCache.has(file) else { return nil }
+            return RqFinding(id: "local-" + scheme.id, group: "Схемы без доступного PDF",
+                             text: "«\(scheme["title"].str)» — локальный файл недоступен здесь. Проверьте исходник на компьютере.")
+        }
     }
 
     private static func statuses(_ schemes: [Rec]) -> [RqFinding] {
@@ -282,11 +274,9 @@ enum RqAct {
                                      text: "«\(title)» отмечена подписанной, а подписанного файла нет: вернуть «На подписи»",
                                      fix: { patch($0, "schemes", id) { $0["status"] = .s("review") } }))
             }
-            if !s["signed"].str.isEmpty && !s["pdf"].str.isEmpty && st != "signed" {
-                let label = (isStatus[st] ?? isStatus["draft"] ?? ("Черновик", Color.secondary)).0
-                out.append(RqFinding(id: "st2" + id, group: "Статус не совпадает с файлами",
-                                     text: "«\(title)»: подписанная копия есть, а статус «\(label)»: отметить «Подписана»", on: true,
-                                     fix: { patch($0, "schemes", id) { $0["status"] = .s("signed") } }))
+            if s["sigPkg"]?.bool == true {
+                out.append(RqFinding(id: "oldpkg" + id, group: "Проверить отметку о подписи",
+                                     text: "«\(title)» ранее привязана к пакету. Сверьте соответствие листов."))
             }
         }
         return out
@@ -344,7 +334,7 @@ struct ActualizeView: View {
         var seen = Set<String>()
         return findings.map(\.group).filter { seen.insert($0).inserted }
     }
-    private func isOn(_ f: RqFinding) -> Bool { checked[f.id] ?? f.on }
+    private func isOn(_ f: RqFinding) -> Bool { checked[f.id] == true }
     private var todo: [RqFinding] { findings.filter { $0.fix != nil && isOn($0) } }
 
     var body: some View {
@@ -379,7 +369,7 @@ struct ActualizeView: View {
         return Section {
             ForEach(items.prefix(rqActShown)) { f in row(f) }
             if items.count > rqActShown {
-                Text("и ещё \(items.count - rqActShown) таких же — исправятся вместе с отмеченными").font(.footnote).foregroundStyle(.secondary)
+                Text("и ещё \(items.count - rqActShown) · проверьте после показанных записей").font(.footnote).foregroundStyle(.secondary)
             }
         } header: {
             Text("\(g) · \(items.count)")
